@@ -99,7 +99,7 @@
   .dropzone .dz-title{font-size:13.5px;font-weight:600;color:var(--ink);}
   .dropzone .dz-sub{font-size:12px;color:var(--ink-soft);margin-top:4px;}
   .dropzone input[type=file]{display:none;}
-  .data-status{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--ink-soft);}
+  .data-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--ink-soft);}
   .data-status .pill{
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;
     padding:3px 9px;border-radius:100px;background:var(--surface-soft);border:1px solid var(--line);color:var(--ink-soft);
@@ -139,10 +139,14 @@
     text-decoration:none;flex-shrink:0;
   }
   .tooltip-panel{
-    position:absolute;top:calc(100% + 8px);left:0;z-index:30;width:340px;max-width:min(340px,80vw);
+    position:absolute;top:calc(100% + 8px);left:0;z-index:30;width:min(340px, calc(100vw - 48px));
     background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
     padding:15px 17px;font-size:12.5px;color:var(--ink-soft);line-height:1.55;
   }
+  .tooltip-wrap.align-right .tooltip-panel{left:auto;right:0;}
+  .field-label-row{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;}
+  .field-label-row label{margin-bottom:0;}
+  .field-help-btn{background:none;border:none;padding:0;cursor:pointer;line-height:0;flex-shrink:0;}
   .tooltip-panel.hidden{display:none;}
   .tooltip-panel h5{font-size:11px;color:var(--ink);margin:0 0 6px;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:0.05em;}
   .tooltip-panel code{font-family:'IBM Plex Mono',monospace;background:var(--surface-soft);padding:1px 5px;border-radius:4px;font-size:11.5px;color:var(--ink);}
@@ -202,10 +206,14 @@
 
   @media (max-width:900px){
     .grid-2,.grid-4,.fin-row,.input-panel{grid-template-columns:1fr 1fr;}
+    .upload-grid{grid-template-columns:1fr;}
   }
   @media (max-width:640px){
     .grid-2,.grid-4,.fin-row,.input-panel{grid-template-columns:1fr;}
     .kpi-strip{grid-template-columns:repeat(2,1fr);}
+    .offpeak-fields{flex-direction:column;gap:10px;}
+    .tariff-toggle-row{align-items:stretch;}
+    .tariff-toggle{align-self:flex-start;}
   }
 
   @media print{
@@ -343,7 +351,28 @@
           <div class="input-row"><input type="number" id="inPanelWatts" value="480" min="0" step="10"><span class="unit">W</span></div>
         </div>
         <div class="field">
-          <label>Assumed specific yield</label>
+          <div class="field-label-row">
+            <label>Assumed specific yield</label>
+            <span class="tooltip-wrap align-right">
+              <button type="button" class="field-help-btn yield-help-btn" aria-expanded="false" aria-label="What is specific yield, and how do I get my own figure?">
+                <span class="info-btn" aria-hidden="true">i</span>
+              </button>
+              <div class="tooltip-panel hidden" id="yieldInfoPanel">
+                <h5>What "specific yield" means</h5>
+                <ul>
+                  <li>It's the energy a solar array produces per year for every kWp of panels installed — in <code>kWh/kWp/yr</code>. Multiply it by your array size (shown below as "Array size") to get expected annual generation.</li>
+                  <li>It depends on your location, roof pitch, compass orientation, and any shading — not just panel quality — so it varies a fair amount between two otherwise-identical systems on different roofs.</li>
+                  <li>Across the UK it typically runs roughly <b>850–1,050 kWh/kWp/yr</b> for an unshaded, south-facing roof at a good pitch — lower in the north, higher in the south, and lower still on east/west-facing or shaded roofs. The 970 default here is a reasonable mid-UK, south-facing estimate — not your figure.</li>
+                </ul>
+                <h5 style="margin-top:10px;">How to get your own figure</h5>
+                <ul>
+                  <li>Free and most accurate DIY option: the EU's <b>PVGIS</b> tool (photovoltaic-software.com or re.jrc.ec.europa.eu/pvg_tools) — enter your postcode/coordinates plus your roof's tilt and compass direction, and it returns a site-specific yield estimate.</li>
+                  <li>Simplest option: ask your installer for the annual generation (kWh) figure from their MCS-compliant design software — divide it by your array's kWp to get the specific yield they've assumed, or just enter their kWh figure directly by adjusting this field until "Modelled generation" above matches theirs.</li>
+                  <li>After installation, your MCS certificate will show the yield estimate actually used for your install — worth checking that against what you assumed here.</li>
+                </ul>
+              </div>
+            </span>
+          </div>
           <div class="input-row"><input type="number" id="inYield" value="970" min="0" step="10"><span class="unit">kWh/kWp/yr</span></div>
         </div>
         <div class="derived">Array size: <b id="derivedKwp">3.84</b> kWp</div>
@@ -521,6 +550,44 @@
       <div class="card stat-card"><div class="label" id="beALabel">Term A breaks even</div><div class="value" id="beAYear">Year 8</div><div class="sub" id="beASub"></div></div>
       <div class="card stat-card"><div class="label" id="beBLabel">Term B breaks even</div><div class="value" id="beBYear">Year 10</div><div class="sub" id="beBSub"></div></div>
     </div>
+  </section>
+
+  <!-- ROI VS INVESTING -->
+  <section>
+    <div class="section-head">
+      <div class="kicker">Same money, different use</div>
+      <h2>ROI vs. investing the cash instead</h2>
+      <p>What if, rather than buying the system, you'd put the cash price into the stock market and just kept paying your normal electricity bills? Both scenarios below start from the same lump sum, assume a cash purchase (no financing) and flat electricity prices — set your own assumed investment return.</p>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="field" style="max-width:280px;margin-bottom:0;">
+        <label>Assumed investment return</label>
+        <div class="input-row"><input type="number" id="inInvestReturn" value="6" min="0" step="0.1"><span class="unit">% per year</span></div>
+        <div class="derived">A rough long-run average for a diversified global stock index fund, before fees or tax — adjust to your own assumption.</div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card stat-card">
+        <div class="label">System's effective annual return</div>
+        <div class="value good" id="roiSystemRate">—</div>
+        <div class="sub" id="roiSystemSub"></div>
+      </div>
+      <div class="card stat-card">
+        <div class="label">Vs. your assumed investment return</div>
+        <div class="value" id="roiInvestRate">—</div>
+        <div class="sub" id="roiInvestSub"></div>
+      </div>
+    </div>
+    <div class="chart-card" style="margin-top:16px;">
+      <h3>Cumulative net cost: system vs. investing the cash price</h3>
+      <p class="cap">Lower is better on both lines. System = cash price + net electricity bills paid each year. Investing = full electricity bills paid each year, offset by the investment's growth.</p>
+      <div class="flow-legend" style="margin-bottom:8px;">
+        <div class="legend-item"><span class="legend-swatch" style="background:#163832"></span>System (net cost)</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#4A6FA5"></span>Investing instead (net cost)</div>
+      </div>
+      <div id="chartRoi"></div>
+    </div>
+    <div class="insight-box" id="roiInsight"></div>
   </section>
 
   <!-- MONTHLY TABLE -->
@@ -711,20 +778,29 @@ dzEl.addEventListener('drop', function(e){
   if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length>0) handleFiles(e.dataTransfer.files);
 });
 
-document.getElementById('formatInfoBtn').addEventListener('click', function(e){
-  e.preventDefault();
-  const panel = document.getElementById('formatInfoPanel');
-  const willOpen = panel.classList.contains('hidden');
-  panel.classList.toggle('hidden', !willOpen);
-  this.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+document.querySelectorAll('.tooltip-wrap').forEach(function(wrap){
+  const btn = wrap.querySelector('.format-help-btn, .field-help-btn');
+  const panel = wrap.querySelector('.tooltip-panel');
+  if(!btn || !panel) return;
+  btn.addEventListener('click', function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    const willOpen = panel.classList.contains('hidden');
+    document.querySelectorAll('.tooltip-panel').forEach(function(p){ p.classList.add('hidden'); });
+    document.querySelectorAll('.format-help-btn, .field-help-btn').forEach(function(b){ b.setAttribute('aria-expanded','false'); });
+    panel.classList.toggle('hidden', !willOpen);
+    btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  });
 });
 document.addEventListener('click', function(e){
-  const wrap = document.querySelector('.tooltip-wrap');
-  const panel = document.getElementById('formatInfoPanel');
-  if(wrap && !wrap.contains(e.target) && !panel.classList.contains('hidden')){
-    panel.classList.add('hidden');
-    document.getElementById('formatInfoBtn').setAttribute('aria-expanded','false');
-  }
+  document.querySelectorAll('.tooltip-wrap').forEach(function(wrap){
+    const panel = wrap.querySelector('.tooltip-panel');
+    const btn = wrap.querySelector('.format-help-btn, .field-help-btn');
+    if(panel && !wrap.contains(e.target) && !panel.classList.contains('hidden')){
+      panel.classList.add('hidden');
+      if(btn) btn.setAttribute('aria-expanded','false');
+    }
+  });
 });
 
 document.getElementById('useExampleBtn').addEventListener('click', function(){
@@ -1216,6 +1292,58 @@ function recalcAll(){
   document.getElementById('beBYear').textContent = beB ? ('Year '+beB) : 'Beyond 20 yr';
   document.getElementById('beBSub').textContent = beB ? ('£'+fmt0(baselineCum[14]-solarB[14])+' ahead by yr 15; £'+fmt0(baselineCum[19]-solarB[19])+' by yr 20') : '';
 
+  // ---- ROI vs investing ----
+  const investReturnPct = parseFloat(document.getElementById('inInvestReturn').value)||0;
+  const rInvest = investReturnPct/100;
+  const sysSpend = years.map(function(y){ return cost + annNet*y; });
+  const investSpend = years.map(function(y){ return annBase*y - (cost*Math.pow(1+rInvest,y) - cost); });
+  const sysAdvantage = years.map(function(y,i){ return investSpend[i]-sysSpend[i]; });
+  document.getElementById('chartRoi').innerHTML = svgLineChart(
+    years.map(y=>'Yr '+y),
+    [
+      {data:sysSpend, color:'#163832', points:false, width:2.5},
+      {data:investSpend, color:'#4A6FA5', points:false, width:2.5, dash:'5,3'}
+    ], 1000, 260, 2
+  );
+  let roiBe = null;
+  for(let i=0;i<sysAdvantage.length;i++){ if(sysAdvantage[i]>=0){ roiBe=i+1; break; } }
+  const finalYearAdv = sysAdvantage[sysAdvantage.length-1];
+  const yearsSystemAhead = sysAdvantage.filter(function(v){ return v>=0; }).length;
+
+  function solveIRR(costVal, annualSaving, N){
+    if(costVal<=0) return null;
+    if(annualSaving<=0) return -0.99;
+    function pv(r){
+      if(Math.abs(r)<1e-9) return annualSaving*N - costVal;
+      return annualSaving*(1-Math.pow(1+r,-N))/r - costVal;
+    }
+    let lo=-0.95, hi=5;
+    for(let i=0;i<80;i++){
+      const mid=(lo+hi)/2;
+      if(pv(mid)>0) lo=mid; else hi=mid;
+    }
+    return (lo+hi)/2;
+  }
+  const sysIRR = solveIRR(cost, grossSaving, 20);
+  const sysLabel = includeSolar ? 'solar + battery system' : 'battery-only system';
+  document.getElementById('roiSystemRate').textContent = (sysIRR===null) ? '—' : ((sysIRR*100).toFixed(1)+'%');
+  document.getElementById('roiSystemSub').textContent = (sysIRR===null)
+    ? 'Enter a cash price above £0 to calculate.'
+    : 'Your '+sysLabel+' — £'+fmt0(cost)+' cash price against £'+fmt0(grossSaving)+'/yr saved, over 20 years.';
+  document.getElementById('roiInvestRate').textContent = investReturnPct.toFixed(1)+'%';
+  document.getElementById('roiInvestSub').textContent = 'The rate you assumed above for the same £'+fmt0(cost)+' invested instead.';
+
+  document.getElementById('roiInsight').innerHTML = (sysIRR===null) ? '<b>Add a cash price above to compare.</b>' : (
+    (sysIRR*100 >= investReturnPct
+      ? '<b>By annualised return, the system wins:</b> its '+(sysIRR*100).toFixed(1)+'% effective annual return beats the '+investReturnPct.toFixed(1)+'% assumed investment return. '
+      : '<b>By annualised return, investing wins:</b> the assumed '+investReturnPct.toFixed(1)+'% investment return beats the system\'s '+(sysIRR*100).toFixed(1)+'% effective annual return. ')
+    + 'In cash terms over the full 20-year view in the chart, '
+    + (finalYearAdv >= 0
+        ? ('the system leaves you <b>£'+fmt0(Math.abs(finalYearAdv))+' better off</b> than investing the cash instead — ahead for '+yearsSystemAhead+' of those 20 years.')
+        : ('investing the cash instead leaves you <b>£'+fmt0(Math.abs(finalYearAdv))+' better off</b> than the system — the system was only ahead for '+yearsSystemAhead+' of those 20 years.'))
+    + ' A compounding investment accelerates over time while the system\'s annual saving stays roughly flat, so the two lines can cross more than once near the end of the horizon — worth reading the chart itself rather than a single "breakeven year". Both sides also assume flat electricity prices and a flat, fee-free, tax-free return — in practice, electricity prices have historically trended up (favouring the system) and real investment returns are volatile year to year, unlike this straight-line assumption.'
+  );
+
   // ---- monthly table ----
   document.getElementById('monthlyTableBody').innerHTML = monthRows.map(function(m){
     return '<tr><td>'+m.name+'</td><td class="mono">'+fmt0(m.consumption)+'</td>'+
@@ -1233,9 +1361,10 @@ function recalcAll(){
   '<td class="mono"><b>£'+fmt(annNet)+'</b></td><td class="mono">£'+fmt(annBase)+'</td></tr>';
 
   // ---- footer methodology ----
-  document.getElementById('methodologyText').textContent = includeSolar
+  document.getElementById('methodologyText').textContent = (includeSolar
     ? 'Consumption is your real half-hourly usage pattern, averaged into a (month × half-hour) profile and repeated across a standard calendar year. Solar generation scales linearly with kWp × specific yield using the same modelled SE-facing shape as the original analysis. Battery dispatch is simulated per representative day per month (converged to a steady overnight state), then scaled by days in month — a close approximation of the full half-hourly simulation used in the original report, typically within 1-2% on annual totals. Financing uses standard reducing-balance amortisation on the stated APR. This tool is for comparing options as quotes come in — not a substitute for an installer\'s formal design or a regulated financial illustration.'
-    : 'Battery-only mode uses the same real consumption profile and battery dispatch logic, with solar generation set to zero — the battery is charged to full every night from the grid at the off-peak rate, then discharged to cover demand outside the cheap window until it runs out, with any shortfall drawn from the grid at the peak rate. There is no export income in this mode.';
+    : 'Battery-only mode uses the same real consumption profile and battery dispatch logic, with solar generation set to zero — the battery is charged to full every night from the grid at the off-peak rate, then discharged to cover demand outside the cheap window until it runs out, with any shortfall drawn from the grid at the peak rate. There is no export income in this mode.')
+    + ' The ROI-vs-investing comparison assumes a cash purchase (the deposit and financing terms above don\'t apply to it), a flat assumed investment return compounded annually with no fees or tax, and flat electricity prices — it\'s a simplified like-for-like comparison, not financial advice.';
 }
 
 // ---- mode switching ----
@@ -1254,7 +1383,7 @@ document.getElementById('modeToggle').addEventListener('click', function(e){
 document.getElementById('resetBtn').addEventListener('click', function(){
   const defaults = {inPanelCount:8, inPanelWatts:480, inYield:970, inBattery:10, inEff:95,
     inCostSolar:7950, inDepositSolar:100, inCostBattery:4500, inDepositBattery:100,
-    inApr:9.9, inTermA:60, inTermB:120, inPeakRate:33.54, inOffpeakRate:9.50, inStanding:52.8, inExportRate:12};
+    inApr:9.9, inTermA:60, inTermB:120, inPeakRate:33.54, inOffpeakRate:9.50, inStanding:52.8, inExportRate:12, inInvestReturn:6};
   Object.keys(defaults).forEach(function(id){ document.getElementById(id).value = defaults[id]; });
   hasOffpeakTariff = true;
   document.querySelectorAll('#offpeakTariffToggle .tt-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.val==='yes'); });
