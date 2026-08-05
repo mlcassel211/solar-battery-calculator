@@ -550,6 +550,7 @@
       <div class="card stat-card"><div class="label" id="beALabel">Term A breaks even</div><div class="value" id="beAYear">Year 8</div><div class="sub" id="beASub"></div></div>
       <div class="card stat-card"><div class="label" id="beBLabel">Term B breaks even</div><div class="value" id="beBYear">Year 10</div><div class="sub" id="beBSub"></div></div>
     </div>
+    <div class="note-box" id="cumulativeNote"></div>
   </section>
 
   <!-- ROI VS INVESTING -->
@@ -595,12 +596,13 @@
     <div class="section-head">
       <div class="kicker">Full detail</div>
       <h2>Month-by-month numbers</h2>
+      <p>"Usage: off-peak / peak" is your raw consumption split by tariff window, before the system changes anything — useful for sanity-checking how much of your usage sits in the cheap window already. The cost columns further right reflect actual grid draw after solar/battery.</p>
     </div>
     <div class="table-wrap card" style="padding:6px 20px;">
       <table>
         <thead>
           <tr>
-            <th>Month</th><th>Usage</th><th class="solar-only">Solar</th><th class="solar-only">Exported</th>
+            <th>Month</th><th>Usage</th><th>Usage: off-peak</th><th>Usage: peak</th><th class="solar-only">Solar</th><th class="solar-only">Exported</th>
             <th>Off-peak cost</th><th>Peak cost</th><th>Standing</th>
             <th>Bill (pre-export)</th><th class="solar-only">Export credit</th><th>Net cost</th><th>Would've been</th>
           </tr>
@@ -1098,6 +1100,7 @@ function recalcAll(){
     annOffpeakKwh+=offpeakKwh; annPeakKwh+=pm.residual; annStanding+=standingCost;
     annExportKwh+=pm.exportE; annBillPre+=billPre; annExportRev+=exportRev; annNet+=netCost; annBase+=base.cost;
     return {name:pm.name, consumption:pm.consumption, solar:pm.solar, exportE:pm.exportE,
+             usageOffpeak:base.offpeakKwh, usagePeak:base.peakKwh,
              offpeakCost, peakCost, standingCost, billPre, exportRev, netCost, baseCost:base.cost};
   });
 
@@ -1258,20 +1261,17 @@ function recalcAll(){
   const years = [];
   for(let y=1;y<=20;y++) years.push(y);
   const baselineCum = years.map(y=>annBase*y);
-  function cumSeries(princ, dep, M, n, opInterest, opMonths){
-    const totalRepaidOverpay = princ+opInterest;
+  function cumSeries(princ, dep, M, n){
     return years.map(function(y){
       const monthsElapsed = y*12;
-      const loanPaid = includeSolar
-        ? (monthsElapsed>=opMonths ? totalRepaidOverpay : totalRepaidOverpay*(monthsElapsed/Math.max(opMonths,1)))
-        : (monthsElapsed>=n ? M*n : M*monthsElapsed);
+      const loanPaid = (monthsElapsed>=n) ? M*n : M*monthsElapsed;
       const grossElec = annBillPre*y;
       const exportInc = annExportRev*y;
       return dep+loanPaid+grossElec-exportInc;
     });
   }
-  const solarA = cumSeries(principal, deposit, Ma, termA, opA.interest, opA.months);
-  const solarB = cumSeries(principal, deposit, Mb, termB, opB.interest, opB.months);
+  const solarA = cumSeries(principal, deposit, Ma, termA);
+  const solarB = cumSeries(principal, deposit, Mb, termB);
   document.getElementById('chartCumulative').innerHTML = svgLineChart(
     years.map(y=>'Yr '+y),
     [
@@ -1291,6 +1291,17 @@ function recalcAll(){
   document.getElementById('beBLabel').textContent = termB+'-month term breaks even';
   document.getElementById('beBYear').textContent = beB ? ('Year '+beB) : 'Beyond 20 yr';
   document.getElementById('beBSub').textContent = beB ? ('£'+fmt0(baselineCum[14]-solarB[14])+' ahead by yr 15; £'+fmt0(baselineCum[19]-solarB[19])+' by yr 20') : '';
+
+  const longerIsB = termB>termA, shorterBe = longerIsB?beA:beB, longerBe = longerIsB?beB:beA;
+  const longerLabel = longerIsB?termB:termA, shorterLabel = longerIsB?termA:termB;
+  const noteEl = document.getElementById('cumulativeNote');
+  if(termA!==termB && longerBe!==null && (shorterBe===null || longerBe<=shorterBe)){
+    noteEl.style.display='block';
+    noteEl.innerHTML = '<b>Why the longer term can break even sooner:</b> the '+longerLabel+'-month term has a smaller minimum monthly payment, so by any given year you\'ve actually paid out less cash than on the '+shorterLabel+'-month term — even though both repay the same principal in total. That shows up here as an earlier "breakeven", but it reflects payment timing, not the system delivering more value. The gap narrows once the shorter term is fully repaid, and low or 0% APR makes this effect more pronounced since there\'s no extra interest cost to offset it.';
+  } else {
+    noteEl.style.display='none';
+    noteEl.innerHTML='';
+  }
 
   // ---- ROI vs investing ----
   const investReturnPct = parseFloat(document.getElementById('inInvestReturn').value)||0;
@@ -1347,6 +1358,7 @@ function recalcAll(){
   // ---- monthly table ----
   document.getElementById('monthlyTableBody').innerHTML = monthRows.map(function(m){
     return '<tr><td>'+m.name+'</td><td class="mono">'+fmt0(m.consumption)+'</td>'+
+      '<td class="mono">'+fmt0(m.usageOffpeak)+'</td><td class="mono">'+fmt0(m.usagePeak)+'</td>'+
       (includeSolar ? '<td class="mono">'+fmt0(m.solar)+'</td><td class="mono">'+fmt0(m.exportE)+'</td>' : '<td class="mono">—</td><td class="mono">—</td>')+
       '<td class="mono">£'+fmt(m.offpeakCost)+'</td><td class="mono">£'+fmt(m.peakCost)+'</td><td class="mono">£'+fmt(m.standingCost)+'</td>'+
       '<td class="mono">£'+fmt(m.billPre)+'</td>'+
@@ -1354,6 +1366,7 @@ function recalcAll(){
       '<td class="mono"><b>£'+fmt(m.netCost)+'</b></td><td class="mono">£'+fmt(m.baseCost)+'</td></tr>';
   }).join('') +
   '<tr class="total"><td>Total (year)</td><td class="mono">'+fmt0(monthRows.reduce((a,m)=>a+m.consumption,0))+'</td>'+
+  '<td class="mono">'+fmt0(monthRows.reduce((a,m)=>a+m.usageOffpeak,0))+'</td><td class="mono">'+fmt0(monthRows.reduce((a,m)=>a+m.usagePeak,0))+'</td>'+
   (includeSolar ? '<td class="mono">'+fmt0(monthRows.reduce((a,m)=>a+m.solar,0))+'</td><td class="mono">'+fmt0(monthRows.reduce((a,m)=>a+m.exportE,0))+'</td>' : '<td class="mono">—</td><td class="mono">—</td>')+
   '<td class="mono">£'+fmt(monthRows.reduce((a,m)=>a+m.offpeakCost,0))+'</td><td class="mono">£'+fmt(monthRows.reduce((a,m)=>a+m.peakCost,0))+'</td><td class="mono">£'+fmt(monthRows.reduce((a,m)=>a+m.standingCost,0))+'</td>'+
   '<td class="mono">£'+fmt(monthRows.reduce((a,m)=>a+m.billPre,0))+'</td>'+
