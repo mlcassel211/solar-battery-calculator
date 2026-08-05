@@ -332,6 +332,45 @@
     </div>
   </section>
 
+  <!-- BATTERY SIZING -->
+  <section>
+    <div class="section-head">
+      <div class="kicker">Before you get quotes</div>
+      <h2>What battery size do you actually need?</h2>
+      <p>Worked out from your usage pattern above (not the battery size you enter in Step 2 below) — how much a battery would need to cover on a typical day, and how much extra saving each additional kWh actually buys you.</p>
+    </div>
+    <div class="grid-2">
+      <div class="card stat-card">
+        <div class="label">Typical-day minimum</div>
+        <div class="value" id="battMinTypical">— kWh</div>
+        <div class="sub" id="battMinTypicalSub"></div>
+      </div>
+      <div class="card stat-card">
+        <div class="label">Worst-month minimum</div>
+        <div class="value" id="battMinWorst">— kWh</div>
+        <div class="sub" id="battMinWorstSub"></div>
+      </div>
+    </div>
+    <div class="chart-card" style="margin-top:16px;">
+      <h3>Annual saving vs. battery size</h3>
+      <p class="cap">Battery size in kWh along the bottom, annual saving in £ up the side. Everything else held at your current Step 2 inputs — only battery size changes along this line.</p>
+      <div id="chartBatterySweep"></div>
+    </div>
+    <div class="insight-box" id="battSizeInsight"></div>
+    <div class="card" style="margin-top:16px;">
+      <h4 style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-faint);margin-bottom:12px;">Other things worth knowing about battery sizing</h4>
+      <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ink-soft);line-height:1.7;">
+        <li><b>Usable vs. nameplate capacity.</b> The headline kWh figure on a spec sheet is sometimes the gross/nameplate capacity rather than what you can actually draw on — ask installers specifically for the <b>usable</b> capacity after depth-of-discharge limits, since that's what this tool assumes throughout.</li>
+        <li><b>Power rating matters as much as capacity.</b> A battery's kW output (not just its kWh capacity) determines whether it can cover a spike in demand — an oven, a kettle and an EV charger running together can exceed what a small inverter can deliver, even with plenty of charge still stored.</li>
+        <li><b>Typical UK household sizes.</b> Most homes land around 5–10 kWh usable; households with an EV, a heat pump, or a larger family often go for 10–20 kWh, sometimes as stacked/modular units from the same manufacturer.</li>
+        <li><b>Diminishing returns are real.</b> Sizing for a typical day rather than your single heaviest day is usually the better financial call — the last few kWh of a "cover every worst case" battery often sit unused for most of the year, as the chart above shows for your own usage.</li>
+        <li><b>Chemistry.</b> Most modern home batteries use LFP (lithium iron phosphate) cells — more thermally stable than older lithium chemistries, typically rated for 6,000+ cycles and backed by 10-year warranties.</li>
+        <li><b>Degradation.</b> Usable capacity fades a little each year — commonly a few percent per year over a decade — so a bit of headroom above your calculated minimum helps the system still meet your needs later in its warranty life.</li>
+        <li><b>Expandable systems.</b> Many batteries are modular — it's often cheaper to start slightly smaller and add a second unit later if you need it than to oversize from day one and pay for capacity you rarely draw on.</li>
+      </ul>
+    </div>
+  </section>
+
   <!-- EDITABLE INPUTS -->
   <section class="tight">
     <div class="section-head">
@@ -1105,6 +1144,87 @@ function recalcAll(){
   });
 
   const grossSaving = annBase - annNet;
+
+  // ---- battery sizing recommendation ----
+  (function(){
+    const kwpYield = kWp*inp.yieldVal;
+    let annualGap = 0;
+    const perMonthGap = [];
+    for(let mi=0; mi<12; mi++){
+      const consSlots = DATA.cons.slice(mi*48,(mi+1)*48);
+      const shapeSlots = DATA.shape.slice(mi*48,(mi+1)*48);
+      let dayGap = 0;
+      for(let s=0;s<48;s++){
+        if(DATA.offpeak[s]===1) continue;
+        const L = consSlots[s];
+        const S = includeSolar ? shapeSlots[s]*kwpYield : 0;
+        dayGap += Math.max(0, L-S);
+      }
+      perMonthGap.push({name:DATA.months[mi], dayGap:dayGap});
+      annualGap += dayGap*DATA.days[mi];
+    }
+    const avgDailyGap = annualGap/365;
+    let worst = perMonthGap[0];
+    perMonthGap.forEach(function(m){ if(m.dayGap>worst.dayGap) worst=m; });
+    const effFrac = Math.max(inp.effPct,1)/100;
+    const recTypical = avgDailyGap/effFrac;
+    const recWorst = worst.dayGap/effFrac;
+
+    document.getElementById('battMinTypical').textContent = recTypical.toFixed(1)+' kWh';
+    document.getElementById('battMinTypicalSub').textContent = 'Covers an average day\'s usage outside the cheap window'+(includeSolar?', after direct solar use':'')+'.';
+    document.getElementById('battMinWorst').textContent = recWorst.toFixed(1)+' kWh';
+    document.getElementById('battMinWorstSub').textContent = 'Covers a typical day in '+worst.name+', your heaviest month for this.';
+
+    function annualSavingForBattery(bKwh){
+      const s2 = simulateYear(kWp, inp.yieldVal, bKwh, includeSolar, inp.effPct);
+      let base2=0, net2=0;
+      s2.perMonth.forEach(function(pm, mi){
+        const bl = baselineForMonth(mi, rates);
+        const offpeakKwh2 = pm.offpeakHome+pm.offpeakTopup;
+        const offpeakCost2 = offpeakKwh2*rates.offpeak/100;
+        const peakCost2 = pm.residual*rates.peak/100;
+        const standingCost2 = pm.days*rates.standing/100;
+        const billPre2 = offpeakCost2+peakCost2+standingCost2;
+        const exportRev2 = includeSolar ? pm.exportE*inp.exportRate/100 : 0;
+        net2 += billPre2-exportRev2;
+        base2 += bl.cost;
+      });
+      return base2-net2;
+    }
+
+    const maxSweep = Math.max(20, Math.ceil(recWorst/2)*2+4);
+    const stepSize = maxSweep<=20 ? 1 : 2;
+    const sizes = [];
+    for(let b=0;b<=maxSweep;b+=stepSize) sizes.push(b);
+    const sweepSavings = sizes.map(function(b){ return annualSavingForBattery(b); });
+
+    document.getElementById('chartBatterySweep').innerHTML = svgLineChart(
+      sizes.map(b=>b+''),
+      [{data:sweepSavings, color:'#163832', points:false, width:2.5}],
+      1000, 220, sizes.length>15?2:1
+    );
+
+    const maxSaving = Math.max.apply(null, sweepSavings);
+    let elbowSize = sizes[sizes.length-1];
+    for(let i=0;i<sizes.length;i++){ if(maxSaving>0 && sweepSavings[i]>=maxSaving*0.9){ elbowSize=sizes[i]; break; } }
+
+    const currentSize = inp.batteryKwh;
+    let sizeVerdict;
+    if(recTypical<=0.05){
+      sizeVerdict = 'more than enough — your usage outside the cheap window is already minimal for this profile.';
+    } else if(currentSize < recTypical*0.85){
+      sizeVerdict = 'smaller than the typical-day minimum — expect some peak-rate grid import on most days.';
+    } else if(currentSize < recTypical*1.15){
+      sizeVerdict = 'close to the typical-day minimum — a cost-efficient size for most of the year.';
+    } else if(currentSize < recWorst*1.15){
+      sizeVerdict = 'between the typical-day and worst-month minimums — reasonable headroom for winter.';
+    } else {
+      sizeVerdict = 'above the worst-month minimum — you\'re unlikely to run out on most days, though the last few kWh add less to your annual saving.';
+    }
+
+    document.getElementById('battSizeInsight').innerHTML =
+      '<b>Your current Step 2 input of '+currentSize.toFixed(1)+' kWh is '+sizeVerdict+'</b> Based on the chart above, savings for your usage pattern level off noticeably from around <b>'+elbowSize+' kWh</b> — sizing much beyond that mostly adds cost without much extra saving, unless you\'re deliberately planning ahead for future usage (an EV, an extension, etc.) rather than what you use today.';
+  })();
 
   // ---- KPI strip ----
   document.getElementById('kpiGenLabel').textContent = includeSolar ? 'Modelled generation' : 'Battery capacity';
